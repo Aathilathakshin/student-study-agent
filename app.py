@@ -34,9 +34,6 @@ if "notes_text" not in st.session_state:
 if "notes_name" not in st.session_state:
     st.session_state.notes_name = ""
 
-if "notes_summary" not in st.session_state:
-    st.session_state.notes_summary = ""
-
 # ---------------- STUDY MODE ----------------
 study_mode = st.selectbox(
     "Choose study mode",
@@ -46,12 +43,6 @@ study_mode = st.selectbox(
         "Give examples",
         "Quiz me"
     ]
-)
-
-# ---------------- SUBJECT ----------------
-subject_name = st.text_input(
-    "Subject name",
-    placeholder="Example: Operating Systems"
 )
 
 # ---------------- NOTES UPLOAD ----------------
@@ -77,12 +68,8 @@ if uploaded_file is not None:
             )
 
         if extracted_text.strip():
-            # Update stored notes only if a different file is uploaded
-            if uploaded_file.name != st.session_state.notes_name:
-                st.session_state.notes_text = extracted_text
-                st.session_state.notes_name = uploaded_file.name
-                st.session_state.notes_summary = ""
-
+            st.session_state.notes_text = extracted_text
+            st.session_state.notes_name = uploaded_file.name
             st.success(f"Notes loaded: {uploaded_file.name}")
         else:
             st.warning(
@@ -100,51 +87,7 @@ if st.session_state.notes_text:
     if st.button("Remove uploaded notes"):
         st.session_state.notes_text = ""
         st.session_state.notes_name = ""
-        st.session_state.notes_summary = ""
         st.rerun()
-
-# ---------------- SUMMARIZE NOTES ----------------
-if st.session_state.notes_text:
-    if st.button("Summarize uploaded notes"):
-        with st.spinner("Preparing your summary..."):
-            try:
-                summary_response = client.models.generate_content(
-                    model="gemini-3.8-flash",
-                    contents=(
-                        f"Subject: {subject_name or 'Study notes'}\n\n"
-                        "Summarize these notes in simple language. "
-                        "Use headings and bullet points. Preserve important "
-                        "terms and facts from the notes. Do not add unsupported details.\n\n"
-                        f"NOTES:\n{st.session_state.notes_text}"
-                    )
-                )
-
-                st.session_state.notes_summary = (
-                    summary_response.text
-                    or "Summary couldn't be generated."
-                )
-
-            except Exception as error:
-                error_message = str(error)
-
-                if "503" in error_message or "UNAVAILABLE" in error_message:
-                    st.warning(
-                        "Gemini is busy right now. Please wait a little and try again."
-                    )
-                else:
-                    st.error("Summary generate panna mudiyala.")
-                    st.caption(error_message)
-
-    if st.session_state.notes_summary:
-        st.subheader("📝 Notes Summary")
-        st.markdown(st.session_state.notes_summary)
-
-        st.download_button(
-            label="Download summary as TXT",
-            data=st.session_state.notes_summary,
-            file_name="study_notes_summary.txt",
-            mime="text/plain"
-        )
 
 # ---------------- DISPLAY CHAT HISTORY ----------------
 for message in st.session_state.messages:
@@ -163,12 +106,11 @@ if question:
     with st.chat_message("user"):
         st.markdown(question)
 
-    # Previous conversation messages
+    # Previous messages only; current question is added below
     chat_history = []
 
     for message in st.session_state.messages[:-1]:
         role = "user" if message["role"] == "user" else "model"
-
         chat_history.append({
             "role": role,
             "parts": [{"text": message["content"]}]
@@ -186,26 +128,25 @@ if question:
         ),
         "Quiz me": (
             "Create a short quiz about the topic. Ask one question at a time. "
-            "Wait for the student's answer before revealing the answer."
+            "Wait for the user's answer before revealing the answer."
         )
     }
 
-    # Include uploaded notes as context
+    # Include uploaded notes when available
     notes_context = ""
 
     if st.session_state.notes_text:
         notes_context = (
-            f"Subject: {subject_name or 'Not specified'}\n"
-            "Use the uploaded notes as the main source. "
-            "If the notes do not contain the answer, say that the notes "
-            "do not specify it. Do not invent details.\n\n"
-            f"UPLOADED NOTES:\n{st.session_state.notes_text}\n\n"
+            "\n\nUse the following uploaded study notes as the main source. "
+            "Answer based on these notes. If the notes do not contain the "
+            "answer, say that the uploaded notes do not specify it.\n\n"
+            f"NOTES:\n{st.session_state.notes_text}"
         )
 
     current_prompt = (
         f"Study mode: {study_mode}\n"
-        f"Instructions: {mode_instructions[study_mode]}\n\n"
-        f"{notes_context}"
+        f"Instructions: {mode_instructions[study_mode]}\n"
+        f"{notes_context}\n\n"
         f"Student's question: {question}"
     )
 
