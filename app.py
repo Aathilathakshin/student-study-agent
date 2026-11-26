@@ -28,6 +28,17 @@ client = genai.Client(api_key=api_key)
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Study mode selector
+study_mode = st.selectbox(
+    "Choose study mode",
+    [
+        "Normal answer",
+        "Explain simply",
+        "Give examples",
+        "Quiz me"
+    ]
+)
+
 # Display previous chat messages
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -37,7 +48,7 @@ for message in st.session_state.messages:
 question = st.chat_input("Type your study question here...")
 
 if question:
-    # Add and display user's message
+    # Display and store the user's question
     st.session_state.messages.append({
         "role": "user",
         "content": question
@@ -46,10 +57,10 @@ if question:
     with st.chat_message("user"):
         st.markdown(question)
 
-    # Prepare full conversation history for Gemini
+    # Prepare previous conversation for Gemini
     chat_history = []
 
-    for message in st.session_state.messages:
+    for message in st.session_state.messages[:-1]:
         role = "user" if message["role"] == "user" else "model"
 
         chat_history.append({
@@ -57,7 +68,26 @@ if question:
             "parts": [{"text": message["content"]}]
         })
 
-    # Generate answer
+    # Add current question with selected study mode
+    mode_instructions = {
+        "Normal answer": "Answer clearly and accurately.",
+        "Explain simply": "Explain in beginner-friendly, simple language. Break down difficult ideas into steps.",
+        "Give examples": "Explain the topic and include a simple, relevant example.",
+        "Quiz me": "Create a short quiz about the topic. Ask one question at a time and wait for the user's answer. Do not reveal the answer immediately."
+    }
+
+    current_prompt = (
+        f"Study mode: {study_mode}.\n"
+        f"{mode_instructions[study_mode]}\n\n"
+        f"User's question: {question}"
+    )
+
+    chat_history.append({
+        "role": "user",
+        "parts": [{"text": current_prompt}]
+    })
+
+    # Generate response
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
             try:
@@ -73,7 +103,7 @@ if question:
 
                 st.markdown(answer)
 
-                # Save assistant's response in chat history
+                # Save assistant response
                 st.session_state.messages.append({
                     "role": "assistant",
                     "content": answer
@@ -87,7 +117,9 @@ if question:
                         "Gemini is busy right now. Please wait a little and try again."
                     )
                 else:
-                    st.error("Gemini API error. Please check your API key or model name.")
+                    st.error(
+                        "Gemini API error. Please check your API key or model name."
+                    )
                     st.caption(error_message)
 
 # Clear chat button
