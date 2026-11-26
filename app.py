@@ -11,7 +11,7 @@ st.set_page_config(
 st.title("📚 Student Study Assistant AI Agent")
 st.caption("Ask questions, understand concepts, and get help with your studies.")
 
-# Gemini API key
+# Get API key from Streamlit Secrets
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
 except Exception:
@@ -21,14 +21,14 @@ except Exception:
     )
     st.stop()
 
-# Gemini client
+# Create Gemini client
 client = genai.Client(api_key=api_key)
 
-# Chat history
+# Initialize chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display previous messages
+# Display previous chat messages
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
@@ -37,33 +37,58 @@ for message in st.session_state.messages:
 question = st.chat_input("Type your study question here...")
 
 if question:
-    # Show user question
-    st.session_state.messages.append(
-        {"role": "user", "content": question}
-    )
+    # Add and display user's message
+    st.session_state.messages.append({
+        "role": "user",
+        "content": question
+    })
 
     with st.chat_message("user"):
         st.markdown(question)
 
-    # Get Gemini response
+    # Prepare full conversation history for Gemini
+    chat_history = []
+
+    for message in st.session_state.messages:
+        role = "user" if message["role"] == "user" else "model"
+
+        chat_history.append({
+            "role": role,
+            "parts": [{"text": message["content"]}]
+        })
+
+    # Generate answer
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
             try:
                 response = client.models.generate_content(
                     model="gemini-3.8-flash",
-                    contents=question
+                    contents=chat_history
                 )
 
-                answer = response.text or "I couldn't generate a response. Please try again."
+                answer = response.text
+
+                if not answer:
+                    answer = "I couldn't generate a response. Please try again."
+
                 st.markdown(answer)
 
-                st.session_state.messages.append(
-                    {"role": "assistant", "content": answer}
-                )
+                # Save assistant's response in chat history
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": answer
+                })
 
             except Exception as error:
-                st.error("Gemini API error. Please check your API key and model name.")
-                st.caption(str(error))
+                error_message = str(error)
+
+                if "503" in error_message or "UNAVAILABLE" in error_message:
+                    st.warning(
+                        "Gemini is busy right now. Please wait a little and try again."
+                    )
+                else:
+                    st.error("Gemini API error. Please check your API key or model name.")
+                    st.caption(error_message)
 
 # Clear chat button
 if st.session_state.messages:
